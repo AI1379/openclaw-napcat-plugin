@@ -12,7 +12,12 @@ const plugin = {
   register(api: OpenClawPluginApi) {
     setNapCatRuntime(api.runtime);
     api.registerChannel({ plugin: napcatPlugin as any });
-    api.registerHttpHandler(handleNapCatWebhook);
+    try {
+      api.registerHttpHandler(handleNapCatWebhook);
+    } catch (error) {
+      api.logger.info("Failed to call api.registerHttpHandler, may be unsupported in this OpenClaw version:", error);
+      api.registerHttpRoute({ path: "/napcat", handler: handleNapCatWebhook, auth: "gateway", match: "exact" });
+    }
   },
 };
 
