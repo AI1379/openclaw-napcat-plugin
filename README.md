@@ -138,7 +138,21 @@ Http 客户端
 
 ## 群文件发送（message 工具）
 
-当目标是群聊（`group:<群号>` 或 `session:napcat:group:<群号>`）且 `media/path/filePath` 指向**本地文件路径**时，插件会自动走 NapCat 的 `/upload_group_file`：
+当目标是群聊（`group:<群号>` 或 `session:napcat:group:<群号>`）且 `media/path/filePath` 指向**本地文件路径**时，插件会自动走 NapCat 的 `/upload_group_file`。
+
+### 必要条件（Docker 场景）
+
+若 NapCat 运行在 Docker 中，必须满足以下条件：
+
+1. NapCat 容器有一个“宿主机目录 ↔ 容器目录”的 bind mount（用于上传暂存）
+2. 在 `channels.napcat` 配置以下字段：
+   - `groupFileStageHostDir`：宿主机暂存目录（例如 `/Users/propersama/Docker/napcat/plugins/openclaw-upload`）
+   - `groupFileStageContainerDir`：容器内对应目录（例如 `/app/napcat/plugins/openclaw-upload`）
+3. 上传完成后，插件会自动清理暂存文件，避免目录堆积
+
+> 不需要开放 OpenClaw gateway 的公网/LAN 监听即可使用此方案。
+
+### 说明
 
 - 支持：绝对路径、相对路径、`file://` URL
 - 当前不支持：HTTP/HTTPS 远程文件直接上传（会返回错误）
