@@ -1,13 +1,18 @@
 // Minimal NapCat Channel Implementation
 import path from "node:path";
 import { access, copyFile, mkdir, unlink } from "node:fs/promises";
-import { buildNapCatMediaCq, isAudioMedia, isLikelyLocalPath, resolveLocalFilePath } from "./media.js";
+import { buildNapCatMediaCq, isAudioMedia, resolveLocalFilePath } from "./media.js";
 import { setNapCatConfig } from "./runtime.js";
 
-async function sendToNapCat(url: string, payload: any) {
+async function sendToNapCat(url: string, payload: any, token?: string) {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const normalizedToken = String(token ?? "").trim();
+    if (normalizedToken) {
+        headers["Authorization"] = `Bearer ${normalizedToken}`;
+    }
     const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload)
     });
     if (!res.ok) {
@@ -27,7 +32,7 @@ async function uploadGroupFileToNapCat(url: string, payload: {
     filePath: string;
     fileName: string;
     folder?: string;
-}) {
+}, token?: string) {
     // NapCat upload_group_file expects JSON payload (go-cqhttp style), not multipart form-data.
     const requestPayload: Record<string, unknown> = {
         group_id: payload.groupId,
@@ -38,7 +43,7 @@ async function uploadGroupFileToNapCat(url: string, payload: {
     if (payload.folder) {
         requestPayload.folder = payload.folder;
     }
-    return await sendToNapCat(url, requestPayload);
+    return await sendToNapCat(url, requestPayload, token);
 }
 
 async function ensureReadableFile(filePath: string): Promise<void> {
@@ -215,6 +220,12 @@ export const napcatPlugin = {
                 title: "Inbound Log Directory",
                 description: "Directory to store per-user/per-group inbound logs",
                 default: "./logs/napcat-inbound"
+            },
+            token: {
+                type: "string",
+                title: "HTTP API Token",
+                description: "Token for authenticating with NapCat HTTP server (Bearer token)",
+                default: ""
             }
         }
     },
@@ -238,6 +249,7 @@ export const napcatPlugin = {
         sendText: async ({ to, text, cfg }: any) => {
             const config = cfg.channels?.napcat || {};
             const baseUrl = config.url || "http://127.0.0.1:3000";
+            const token = String(config.token || "").trim();
             
             let targetType = "private";
             let targetId = to;
@@ -270,7 +282,7 @@ export const napcatPlugin = {
             console.log(`[NapCat] Sending to ${targetType} ${targetId}: ${text}`);
             
             try {
-                const result = await sendToNapCat(`${baseUrl}${endpoint}`, payload);
+                const result = await sendToNapCat(`${baseUrl}${endpoint}`, payload, token);
                 return { ok: true, result };
             } catch (err: any) {
                 return { ok: false, error: err.message };
@@ -279,6 +291,7 @@ export const napcatPlugin = {
         sendMedia: async ({ to, text, mediaUrl, cfg }: any) => {
             const config = cfg.channels?.napcat || {};
             const baseUrl = config.url || "http://127.0.0.1:3000";
+            const token = String(config.token || "").trim();
 
             let targetType = "private";
             let targetId = to;
@@ -336,13 +349,13 @@ export const napcatPlugin = {
                         folder: uploadPayload.folder ?? null,
                         upload_file: true,
                     })}`);
-                    const uploadResult = await uploadGroupFileToNapCat(`${baseUrl}/upload_group_file`, uploadPayload);
+                    const uploadResult = await uploadGroupFileToNapCat(`${baseUrl}/upload_group_file`, uploadPayload, token);
 
                     if (text && text.trim()) {
                         await sendToNapCat(`${baseUrl}${endpoint}`, {
                             group_id: targetId,
                             message: text,
-                        });
+                        }, token);
                     }
 
                     console.log(`[NapCat] Uploaded group file to ${targetId}: ${localFilePath}`);
@@ -382,7 +395,7 @@ export const napcatPlugin = {
             console.log(`[NapCat] Sending media to ${targetType} ${targetId}: ${message}`);
 
             try {
-                const result = await sendToNapCat(`${baseUrl}${endpoint}`, payload);
+                const result = await sendToNapCat(`${baseUrl}${endpoint}`, payload, token);
                 return { ok: true, result };
             } catch (err: any) {
                 return { ok: false, error: err.message };
